@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"crypto/hmac"
 	"crypto/rand"
-	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"log"
@@ -192,7 +192,7 @@ func (s SecretKey) sign(message []byte) []byte {
 		return []byte{}
 	}
 
-	mac := hmac.New(sha1.New, s)
+	mac := hmac.New(sha256.New, s)
 	mac.Write(message)
 	return mac.Sum(nil)
 }
