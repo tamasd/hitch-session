@@ -18,6 +18,7 @@ import (
 const (
 	session_id_key      = "_ID"
 	session_context_key = "SESSION"
+	hash_len            = 32
 )
 
 var MalformedCookieError = errors.New("malformed cookie")
@@ -160,11 +161,11 @@ func readPieces(b []byte, key SecretKey) ([]string, error) {
 	strs := []string{}
 	buf := bytes.NewBuffer(nil)
 
-	if len(b) < 21 {
+	if len(b) < hash_len+1 {
 		return strs, MalformedCookieError
 	}
 
-	start := 21
+	start := hash_len + 1
 
 	if !key.verify(b[start:], b[:start-1]) {
 		return strs, SignatureVerificationFailedError
