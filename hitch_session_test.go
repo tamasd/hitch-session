@@ -44,7 +44,7 @@ func TestEncDec(t *testing.T) {
 		sess["foo"] = "bar"
 		sess["bar"] = "baz"
 
-		c := sess.cookie(key, "", true, time.Hour)
+		c := sess.cookie(key, "", nil, time.Hour)
 
 		data := c.Value
 
@@ -59,7 +59,7 @@ func TestHTTPScenario(t *testing.T) {
 		key := getSecretKey()
 
 		h := hitch.New()
-		h.Use(HitchSession("", key, time.Hour))
+		h.Use(HitchSession("", key, nil, time.Hour))
 		h.Post("/set", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			data, _ := ioutil.ReadAll(r.Body)
 

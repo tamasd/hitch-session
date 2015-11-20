@@ -9,6 +9,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -34,8 +35,10 @@ func GetSession(r *http.Request) Session {
 //
 // The prefix is an optional prefix for the cookie name. The cookie name after the prefix is "_SESSION".
 // The key holds the secret key to sign and verify the cookies.
+// The cookie URL determines the domain and the path parts of the HTTP cookie that will be set. It can be nil.
+// If the cookie URL starts with https://, then the cookie will be forced to work only on HTTPS.
 // The expiresAfter sets a duration for the cookies to expire.
-func HitchSession(prefix string, key SecretKey, expiresAfter time.Duration) func(http.Handler) http.Handler {
+func HitchSession(prefix string, key SecretKey, cookieURL *url.URL, expiresAfter time.Duration) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			sess, err := readCookieFromRequest(r, prefix, key)
@@ -51,6 +54,7 @@ func HitchSession(prefix string, key SecretKey, expiresAfter time.Duration) func
 				r:            r,
 				w:            w,
 				expiresAfter: expiresAfter,
+				cookieURL:    cookieURL,
 			}
 
 			next.ServeHTTP(srw, r)
@@ -78,7 +82,7 @@ func (s Session) Id() string {
 	return s[session_id_key]
 }
 
-func (s Session) cookie(key SecretKey, prefix string, secure bool, expiresAfter time.Duration) *http.Cookie {
+func (s Session) cookie(key SecretKey, prefix string, cookieURL *url.URL, expiresAfter time.Duration) *http.Cookie {
 	buf := bytes.NewBuffer(nil)
 	for k, v := range s {
 		if strings.Contains(k, "\x00") {
@@ -103,14 +107,21 @@ func (s Session) cookie(key SecretKey, prefix string, secure bool, expiresAfter 
 		cookieValue = hex.EncodeToString(signature) + hex.EncodeToString(data)
 	}
 
-	return &http.Cookie{
+	c := &http.Cookie{
 		Name:     prefix + "_SESSION",
 		Value:    cookieValue,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   secure,
 		Expires:  time.Now().Add(expiresAfter),
 	}
+
+	if cookieURL != nil {
+		c.Domain = cookieURL.Host
+		c.Path = cookieURL.Path
+		c.Secure = cookieURL.Scheme == "https"
+	}
+
+	return c
 }
 
 func readCookieFromRequest(r *http.Request, prefix string, key SecretKey) (Session, error) {
@@ -211,6 +222,7 @@ type sessionResponseWriter struct {
 	w            http.ResponseWriter
 	expiresAfter time.Duration
 	written      bool
+	cookieURL    *url.URL
 }
 
 func (srw *sessionResponseWriter) Header() http.Header {
@@ -231,7 +243,7 @@ func (srw *sessionResponseWriter) WriteHeader(code int) {
 	}
 
 	sess := GetSession(srw.r)
-	cookie := sess.cookie(srw.key, srw.prefix, srw.r.URL.Scheme == "https", srw.expiresAfter)
+	cookie := sess.cookie(srw.key, srw.prefix, srw.cookieURL, srw.expiresAfter)
 	http.SetCookie(srw.w, cookie)
 
 	srw.w.WriteHeader(code)
